@@ -832,6 +832,7 @@
                 ]
             },
             "properties": {
+                "barangay": "Kapito",
                 "fill": "rgba(255, 213, 4, 1)",
                 "fill-opacity": 0.5
             }

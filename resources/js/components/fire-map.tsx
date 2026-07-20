@@ -87,14 +87,21 @@ export function FireMap({
             maxZoom: 19,
         }).addTo(map);
 
-        if (geoJson) {
-            const geoJsonLayer = L.geoJSON(geoJson.data, {
-                style: geoJson.style,
-                onEachFeature: geoJson.onEachFeature,
-            }).addTo(map);
+       if (geoJson) {
+            try {
+                const geoJsonLayer = L.geoJSON(geoJson.data, {
+                    style: geoJson.style,
+                    onEachFeature: geoJson.onEachFeature,
+                }).addTo(map);
 
-            if (fitToGeoJson) {
-                map.fitBounds(geoJsonLayer.getBounds(), { padding: [16, 16] });
+                if (fitToGeoJson) {
+                    map.fitBounds(geoJsonLayer.getBounds(), {
+                        padding: [16, 16],
+                    });
+                }
+            } catch (error) {
+                // eslint-disable-next-line no-console
+                console.error('FireMap: failed to render geoJson layer', error);
             }
         }
 

@@ -44,7 +44,7 @@ export const BARANGAY_RISK_LEVELS: {
     // The source GeoJSON has one polygon with no "barangay" name set;
     // based on its position it's most likely Lumbangan — verify against
     // the source data and rename here if that's incorrect.
-    { name: 'Lumbangan', risk: 'Low' },
+    { name: 'Kapito', risk: 'Low' },
     { name: 'Lumaniag', risk: 'Low' },
     { name: 'Luyahan', risk: 'Low' },
     { name: 'Matabungkay', risk: 'Low' },

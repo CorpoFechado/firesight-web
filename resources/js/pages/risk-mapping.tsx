@@ -35,7 +35,7 @@ export default function RiskMapping() {
         useState<GeoJSON.FeatureCollection | null>(null);
 
     useEffect(() => {
-        fetch('/data/lian-per-barangay.geojson')
+        fetch('/data/LianPerBarangay.geojson')
             .then((res) => res.json())
             .then((data: GeoJSON.FeatureCollection) =>
                 setBarangayBoundaries(data),

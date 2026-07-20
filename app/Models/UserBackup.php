@@ -4,13 +4,10 @@ namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use App\Enums\UserRole;
-use App\Enums\UserStatus;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Carbon;
@@ -23,8 +20,6 @@ use Laravel\Fortify\TwoFactorAuthenticatable;
  * @property string $name
  * @property string $email
  * @property UserRole $role
- * @property string|null $phone
- * @property UserStatus $status
  * @property Carbon|null $email_verified_at
  * @property string $password
  * @property string|null $two_factor_secret
@@ -34,7 +29,7 @@ use Laravel\Fortify\TwoFactorAuthenticatable;
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-#[Fillable(['name', 'email', 'password', 'role', 'phone', 'status'])]
+#[Fillable(['name', 'email', 'password', 'role'])]
 #[Hidden(['password', 'two_factor_secret', 'two_factor_recovery_codes', 'remember_token'])]
 class User extends Authenticatable implements PasskeyUser
 {
@@ -48,47 +43,6 @@ class User extends Authenticatable implements PasskeyUser
             'password' => 'hashed',
             'two_factor_confirmed_at' => 'datetime',
             'role' => UserRole::class,
-            'status' => UserStatus::class,
         ];
-    }
-
-    /**
-     * Announcements authored by this user (admins only, in practice).
-     *
-     * @return HasMany<Announcement, $this>
-     */
-    public function announcements(): HasMany
-    {
-        return $this->hasMany(Announcement::class, 'created_by');
-    }
-
-    /**
-     * Community fire reports filed by this user.
-     *
-     * @return HasMany<CommunityReport, $this>
-     */
-    public function communityReports(): HasMany
-    {
-        return $this->hasMany(CommunityReport::class, 'user_id');
-    }
-
-    /**
-     * In-app notifications addressed to this user.
-     *
-     * @return HasMany<Notification, $this>
-     */
-    public function notifications(): HasMany
-    {
-        return $this->hasMany(Notification::class, 'user_id');
-    }
-
-    /**
-     * BFP rank/station/employee details, present only for bfp_personnel accounts.
-     *
-     * @return HasOne<BfpPersonnelDetail, $this>
-     */
-    public function bfpPersonnelDetail(): HasOne
-    {
-        return $this->hasOne(BfpPersonnelDetail::class, 'user_id');
     }
 }

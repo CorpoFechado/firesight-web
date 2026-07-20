@@ -1,7 +1,8 @@
-import { Head } from '@inertiajs/react';
+import { Head, router, useForm } from '@inertiajs/react';
 import { Megaphone, Plus, SquarePen, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { toast } from 'sonner';
+import AnnouncementController from '@/actions/App/Http/Controllers/Admin/AnnouncementController';
+import InputError from '@/components/input-error';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -28,36 +29,14 @@ type Announcement = {
     id: number;
     title: string;
     content: string;
+    announcementType: string;
     status: AnnouncementStatus;
     date: string;
 };
 
-const INITIAL_ANNOUNCEMENTS: Announcement[] = [
-    {
-        id: 1,
-        title: 'Fire Safety Week 2026',
-        content:
-            'Join us for Fire Safety Week from March 30 to April 3. Free fire extinguisher training will be held at the municipal hall.',
-        status: 'published',
-        date: 'Published: March 20, 2026',
-    },
-    {
-        id: 2,
-        title: 'New Reporting Feature',
-        content:
-            "We've added photo upload capability to the incident reporting form for faster, more accurate assessments.",
-        status: 'published',
-        date: 'Published: March 15, 2026',
-    },
-    {
-        id: 3,
-        title: 'Scheduled Maintenance',
-        content:
-            'System maintenance scheduled for March 28, 2026 from 2:00 AM to 4:00 AM. The portal may be briefly unavailable.',
-        status: 'draft',
-        date: 'Last edited: March 18, 2026',
-    },
-];
+type PageProps = {
+    announcements: Announcement[];
+};
 
 const STATUS_STYLES: Record<AnnouncementStatus, string> = {
     published:
@@ -67,14 +46,20 @@ const STATUS_STYLES: Record<AnnouncementStatus, string> = {
 
 const MAX_CONTENT_LENGTH = 500;
 
-export default function AdminAnnouncements() {
-    const [announcements, setAnnouncements] = useState(
-        INITIAL_ANNOUNCEMENTS,
-    );
+type FormState = {
+    title: string;
+    content: string;
+    status: AnnouncementStatus | '';
+};
+
+const emptyForm: FormState = { title: '', content: '', status: '' };
+
+export default function AdminAnnouncements({ announcements }: PageProps) {
     const [createOpen, setCreateOpen] = useState(false);
-    const [title, setTitle] = useState('');
-    const [content, setContent] = useState('');
-    const [status, setStatus] = useState<AnnouncementStatus | ''>('');
+    const [editing, setEditing] = useState<Announcement | null>(null);
+
+    const createForm = useForm<FormState>(emptyForm);
+    const editForm = useForm<FormState>(emptyForm);
 
     const stats = useMemo(
         () => ({
@@ -85,41 +70,38 @@ export default function AdminAnnouncements() {
         [announcements],
     );
 
-    const resetForm = () => {
-        setTitle('');
-        setContent('');
-        setStatus('');
+    const openEdit = (announcement: Announcement) => {
+        setEditing(announcement);
+        editForm.setData({
+            title: announcement.title,
+            content: announcement.content,
+            status: announcement.status,
+        });
     };
 
     const handleCreate = () => {
-        if (!title.trim() || !content.trim() || !status) {
-            toast.error('Please fill in all fields');
-            return;
-        }
-
-        setAnnouncements((prev) => [
-            {
-                id: Date.now(),
-                title,
-                content,
-                status,
-                date:
-                    status === 'published'
-                        ? 'Published: just now'
-                        : 'Last edited: just now',
+        createForm.post(AnnouncementController.store.url(), {
+            preserveScroll: true,
+            onSuccess: () => {
+                createForm.reset();
+                setCreateOpen(false);
             },
-            ...prev,
-        ]);
-        resetForm();
-        setCreateOpen(false);
-        toast.success('Announcement created (demo only)');
+        });
+    };
+
+    const handleUpdate = () => {
+        if (!editing) return;
+
+        editForm.patch(AnnouncementController.update.url(editing.id), {
+            preserveScroll: true,
+            onSuccess: () => setEditing(null),
+        });
     };
 
     const handleDelete = (announcement: Announcement) => {
-        setAnnouncements((prev) =>
-            prev.filter((a) => a.id !== announcement.id),
-        );
-        toast.success(`"${announcement.title}" deleted`);
+        router.delete(AnnouncementController.destroy.url(announcement.id), {
+            preserveScroll: true,
+        });
     };
 
     return (
@@ -191,11 +173,7 @@ export default function AdminAnnouncements() {
                                 <Button
                                     variant="outline"
                                     size="sm"
-                                    onClick={() =>
-                                        toast.info(
-                                            `Editing "${announcement.title}" (demo only)`,
-                                        )
-                                    }
+                                    onClick={() => openEdit(announcement)}
                                 >
                                     <SquarePen className="size-3.5" />
                                     Edit
@@ -214,14 +192,20 @@ export default function AdminAnnouncements() {
                             </div>
                         </div>
                     ))}
+                    {announcements.length === 0 && (
+                        <p className="py-8 text-center text-sm text-muted-foreground">
+                            No announcements yet. Create one to get started.
+                        </p>
+                    )}
                 </div>
             </div>
 
+            {/* Create dialog */}
             <Dialog
                 open={createOpen}
                 onOpenChange={(open) => {
                     setCreateOpen(open);
-                    if (!open) resetForm();
+                    if (!open) createForm.reset();
                 }}
             >
                 <DialogContent>
@@ -246,9 +230,15 @@ export default function AdminAnnouncements() {
                             </Label>
                             <Input
                                 placeholder="Fire Safety Week 2026"
-                                value={title}
-                                onChange={(e) => setTitle(e.target.value)}
+                                value={createForm.data.title}
+                                onChange={(e) =>
+                                    createForm.setData(
+                                        'title',
+                                        e.target.value,
+                                    )
+                                }
                             />
+                            <InputError message={createForm.errors.title} />
                         </div>
                         <div className="grid gap-2">
                             <Label>
@@ -259,22 +249,31 @@ export default function AdminAnnouncements() {
                                 className="min-h-24 rounded-md border bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
                                 placeholder="Enter announcement details..."
                                 maxLength={MAX_CONTENT_LENGTH}
-                                value={content}
-                                onChange={(e) => setContent(e.target.value)}
+                                value={createForm.data.content}
+                                onChange={(e) =>
+                                    createForm.setData(
+                                        'content',
+                                        e.target.value,
+                                    )
+                                }
                             />
                             <p className="text-xs text-muted-foreground">
-                                {content.length}/{MAX_CONTENT_LENGTH}{' '}
-                                characters
+                                {createForm.data.content.length}/
+                                {MAX_CONTENT_LENGTH} characters
                             </p>
+                            <InputError message={createForm.errors.content} />
                         </div>
                         <div className="grid gap-2">
                             <Label>
                                 Status <span className="text-red-500">*</span>
                             </Label>
                             <Select
-                                value={status}
+                                value={createForm.data.status}
                                 onValueChange={(value) =>
-                                    setStatus(value as AnnouncementStatus)
+                                    createForm.setData(
+                                        'status',
+                                        value as AnnouncementStatus,
+                                    )
                                 }
                             >
                                 <SelectTrigger>
@@ -289,6 +288,7 @@ export default function AdminAnnouncements() {
                                     </SelectItem>
                                 </SelectContent>
                             </Select>
+                            <InputError message={createForm.errors.status} />
                         </div>
                     </div>
 
@@ -299,7 +299,115 @@ export default function AdminAnnouncements() {
                         >
                             Cancel
                         </Button>
-                        <Button onClick={handleCreate}>Create</Button>
+                        <Button
+                            onClick={handleCreate}
+                            disabled={createForm.processing}
+                        >
+                            Create
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Edit dialog */}
+            <Dialog
+                open={editing !== null}
+                onOpenChange={(open) => {
+                    if (!open) setEditing(null);
+                }}
+            >
+                <DialogContent>
+                    <DialogHeader>
+                        <div className="flex items-center gap-3">
+                            <div className="flex size-9 items-center justify-center rounded-md bg-blue-100 text-blue-700">
+                                <SquarePen className="size-4.5" />
+                            </div>
+                            <div>
+                                <DialogTitle>Edit Announcement</DialogTitle>
+                                <DialogDescription>
+                                    Update this announcement
+                                </DialogDescription>
+                            </div>
+                        </div>
+                    </DialogHeader>
+
+                    <div className="grid gap-4">
+                        <div className="grid gap-2">
+                            <Label>
+                                Title <span className="text-red-500">*</span>
+                            </Label>
+                            <Input
+                                value={editForm.data.title}
+                                onChange={(e) =>
+                                    editForm.setData('title', e.target.value)
+                                }
+                            />
+                            <InputError message={editForm.errors.title} />
+                        </div>
+                        <div className="grid gap-2">
+                            <Label>
+                                Content{' '}
+                                <span className="text-red-500">*</span>
+                            </Label>
+                            <textarea
+                                className="min-h-24 rounded-md border bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                                maxLength={MAX_CONTENT_LENGTH}
+                                value={editForm.data.content}
+                                onChange={(e) =>
+                                    editForm.setData(
+                                        'content',
+                                        e.target.value,
+                                    )
+                                }
+                            />
+                            <p className="text-xs text-muted-foreground">
+                                {editForm.data.content.length}/
+                                {MAX_CONTENT_LENGTH} characters
+                            </p>
+                            <InputError message={editForm.errors.content} />
+                        </div>
+                        <div className="grid gap-2">
+                            <Label>
+                                Status <span className="text-red-500">*</span>
+                            </Label>
+                            <Select
+                                value={editForm.data.status}
+                                onValueChange={(value) =>
+                                    editForm.setData(
+                                        'status',
+                                        value as AnnouncementStatus,
+                                    )
+                                }
+                            >
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Select status" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="published">
+                                        Published
+                                    </SelectItem>
+                                    <SelectItem value="draft">
+                                        Draft
+                                    </SelectItem>
+                                </SelectContent>
+                            </Select>
+                            <InputError message={editForm.errors.status} />
+                        </div>
+                    </div>
+
+                    <DialogFooter>
+                        <Button
+                            variant="secondary"
+                            onClick={() => setEditing(null)}
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            onClick={handleUpdate}
+                            disabled={editForm.processing}
+                        >
+                            Save Changes
+                        </Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>

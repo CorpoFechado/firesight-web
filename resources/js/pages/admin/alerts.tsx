@@ -1,44 +1,59 @@
-import { Head } from '@inertiajs/react';
+import { Head, router } from '@inertiajs/react';
 import { Truck } from 'lucide-react';
-import { useState } from 'react';
-import { toast } from 'sonner';
+import AlertController from '@/actions/App/Http/Controllers/Admin/AlertController';
 import { FireMap } from '@/components/fire-map';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { SAMPLE_ROUTE } from '@/lib/lian-batangas';
 import { cn } from '@/lib/utils';
 
-type UnitStatus = 'Available' | 'Assigned' | 'On Scene';
+type UnitStatus = 'available' | 'assigned' | 'on_scene';
 
 type Unit = {
-    id: string;
+    id: number;
     name: string;
     status: UnitStatus;
 };
 
-const INITIAL_UNITS: Unit[] = [
-    { id: 'ft-01', name: 'Fire Truck 01', status: 'Available' },
-    { id: 'ft-02', name: 'Fire Truck 02', status: 'Available' },
-    { id: 'ft-03', name: 'Fire Truck 03', status: 'On Scene' },
-];
+type PersonnelStat = {
+    label: string;
+    value: number;
+};
 
-const PERSONNEL = [
-    { label: 'On Duty', value: 20, className: '' },
-    { label: 'On Leave', value: 4, className: '' },
-    { label: 'Deployed', value: 8, className: 'text-orange-600' },
-];
+type ActiveIncident = {
+    label: string;
+    position: [number, number];
+} | null;
 
-export default function AdminAlerts() {
-    const [units, setUnits] = useState<Unit[]>(INITIAL_UNITS);
+type PageProps = {
+    units: Unit[];
+    personnel: PersonnelStat[];
+    activeIncident: ActiveIncident;
+};
 
+const PERSONNEL_STYLES: Record<string, string> = {
+    Deployed: 'text-orange-600',
+};
+
+export default function AdminAlerts({
+    units,
+    personnel,
+    activeIncident,
+}: PageProps) {
     const assignUnit = (unit: Unit) => {
-        setUnits((prev) =>
-            prev.map((u) =>
-                u.id === unit.id ? { ...u, status: 'Assigned' } : u,
-            ),
+        router.patch(
+            AlertController.assignUnit.url(unit.id),
+            {},
+            { preserveScroll: true },
         );
-        toast.success(`${unit.name} assigned to the active incident`);
     };
+
+    const mapCenter = activeIncident
+        ? activeIncident.position
+        : SAMPLE_ROUTE[0];
+    const markerPosition = activeIncident
+        ? activeIncident.position
+        : SAMPLE_ROUTE[SAMPLE_ROUTE.length - 1];
 
     return (
         <>
@@ -55,20 +70,26 @@ export default function AdminAlerts() {
                     <Card className="lg:col-span-2">
                         <CardHeader>
                             <CardTitle>Active Incidents Map</CardTitle>
+                            {activeIncident ? (
+                                <p className="text-sm text-muted-foreground">
+                                    Nearest open report: {activeIncident.label}
+                                </p>
+                            ) : (
+                                <p className="text-sm text-muted-foreground">
+                                    No active reports right now
+                                </p>
+                            )}
                         </CardHeader>
                         <CardContent>
                             <div className="relative aspect-video overflow-hidden rounded-xl border">
                                 <FireMap
-                                    center={SAMPLE_ROUTE[0]}
+                                    center={mapCenter}
                                     zoom={16}
                                     route={SAMPLE_ROUTE}
                                     markers={[
                                         {
                                             id: 'active-incident',
-                                            position:
-                                                SAMPLE_ROUTE[
-                                                    SAMPLE_ROUTE.length - 1
-                                                ],
+                                            position: markerPosition,
                                             color: '#dc2626',
                                         },
                                     ]}
@@ -88,7 +109,7 @@ export default function AdminAlerts() {
                                         key={unit.id}
                                         className={cn(
                                             'flex items-center justify-between rounded-lg border px-4 py-3',
-                                            unit.status !== 'On Scene' &&
+                                            unit.status !== 'on_scene' &&
                                                 'border-green-200 bg-green-50',
                                         )}
                                     >
@@ -96,11 +117,11 @@ export default function AdminAlerts() {
                                             <Truck className="size-4 text-muted-foreground" />
                                             {unit.name}
                                         </div>
-                                        {unit.status === 'On Scene' ? (
+                                        {unit.status === 'on_scene' ? (
                                             <span className="text-sm text-muted-foreground">
                                                 On Scene
                                             </span>
-                                        ) : unit.status === 'Assigned' ? (
+                                        ) : unit.status === 'assigned' ? (
                                             <span className="text-sm font-medium text-orange-600">
                                                 Assigned
                                             </span>
@@ -117,6 +138,11 @@ export default function AdminAlerts() {
                                         )}
                                     </div>
                                 ))}
+                                {units.length === 0 && (
+                                    <p className="py-4 text-center text-sm text-muted-foreground">
+                                        No fire units on record.
+                                    </p>
+                                )}
                             </CardContent>
                         </Card>
 
@@ -125,7 +151,7 @@ export default function AdminAlerts() {
                                 <CardTitle>Personnel</CardTitle>
                             </CardHeader>
                             <CardContent className="flex flex-col gap-3 text-sm">
-                                {PERSONNEL.map((item) => (
+                                {personnel.map((item) => (
                                     <div
                                         key={item.label}
                                         className="flex items-center justify-between"
@@ -136,7 +162,7 @@ export default function AdminAlerts() {
                                         <span
                                             className={cn(
                                                 'font-semibold',
-                                                item.className,
+                                                PERSONNEL_STYLES[item.label],
                                             )}
                                         >
                                             {item.value}

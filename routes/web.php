@@ -2,22 +2,29 @@
 
 use App\Http\Controllers\Admin\AlertController;
 use App\Http\Controllers\Admin\AnnouncementController;
-use App\Http\Controllers\Admin\DashboardController;
+use App\Http\Controllers\Admin\DashboardController as AdminDashboardController;
 use App\Http\Controllers\Admin\DataManagementController;
 use App\Http\Controllers\Admin\UserController;
+use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\IncidentController;
 use Illuminate\Support\Facades\Route;
 
 Route::inertia('/', 'welcome')->name('home');
 
 Route::middleware(['auth', 'verified'])->group(function () {
-    Route::inertia('dashboard', 'dashboard')->name('dashboard');
-    Route::inertia('incidents', 'incidents')->name('incidents');
+    Route::get('dashboard', [DashboardController::class, 'index'])->name('dashboard');
+
+    Route::get('incidents', [IncidentController::class, 'index'])->name('incidents');
+    Route::post('incidents', [IncidentController::class, 'store'])->name('incidents.store');
+    Route::patch('incidents/{incident}', [IncidentController::class, 'update'])->name('incidents.update');
+    Route::delete('incidents/{incident}', [IncidentController::class, 'destroy'])->name('incidents.destroy');
+
     Route::inertia('risk-mapping', 'risk-mapping')->name('riskMapping');
     Route::inertia('response', 'response')->name('response');
     Route::inertia('alerts', 'alerts')->name('alerts');
 
     Route::prefix('admin')->middleware('ensure-admin')->group(function () {
-        Route::get('dashboard', [DashboardController::class, 'index'])->name('admin.dashboard');
+        Route::get('dashboard', [AdminDashboardController::class, 'index'])->name('admin.dashboard');
 
         Route::get('users', [UserController::class, 'index'])->name('admin.users');
         Route::post('users', [UserController::class, 'store'])->name('admin.users.store');

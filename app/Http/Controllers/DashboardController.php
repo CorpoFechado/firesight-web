@@ -1,8 +1,7 @@
 <?php
 
-namespace App\Http\Controllers\Admin;
+namespace App\Http\Controllers;
 
-use App\Http\Controllers\Controller;
 use App\Models\CommunityReport;
 use App\Models\IncidentRecord;
 use Illuminate\Http\Request;
@@ -25,8 +24,6 @@ class DashboardController extends Controller
             ->whereDate('created_at', Carbon::today())
             ->count();
 
-        // Approximate response time as the gap between a report coming in
-        // and BFP logging it as a formal incident record.
         $avgResponseMinutes = IncidentRecord::query()
             ->join('community_report', 'community_report.report_id', '=', 'incident_record.report_id')
             ->selectRaw('AVG(TIMESTAMPDIFF(MINUTE, community_report.created_at, incident_record.data_time)) as avg_minutes')
@@ -39,39 +36,10 @@ class DashboardController extends Controller
             ['label' => 'Avg Response Time', 'value' => $avgResponseMinutes !== null ? round(max($avgResponseMinutes, 0), 1).' min' : 'N/A'],
         ];
 
-        $monthlyIncidents = IncidentRecord::query()
-            ->selectRaw('DATE_FORMAT(data_time, "%b") as label, DATE_FORMAT(data_time, "%Y-%m") as sort_key, COUNT(*) as value')
-            ->where('data_time', '>=', Carbon::now()->subMonths(5)->startOfMonth())
-            ->groupBy('label', 'sort_key')
-            ->orderBy('sort_key')
-            ->get(['label', 'value'])
-            ->map(fn ($row) => ['label' => $row->label, 'value' => (int) $row->value])
-            ->values();
-
-        $incidentTypeColors = [
-            'structural' => '#dc2626',
-            'electrical' => '#f97316',
-            'grass' => '#16a34a',
-            'vehicular' => '#0ea5e9',
-            'other' => '#0f172a',
-        ];
-
-        $incidentTypes = IncidentRecord::query()
-            ->selectRaw('incident_type, COUNT(*) as count')
-            ->groupBy('incident_type')
-            ->orderByDesc('count')
-            ->get()
-            ->map(fn ($row) => [
-                'label' => ucfirst($row->incident_type->value),
-                'count' => (int) $row->count,
-                'color' => $incidentTypeColors[$row->incident_type->value] ?? '#94a3b8',
-            ])
-            ->values();
-
         $mapMarkers = CommunityReport::query()
             ->whereIn('status', ['pending', 'verified', 'dispatched'])
             ->latest('created_at')
-            ->limit(10)
+            ->limit(4)
             ->get()
             ->map(fn (CommunityReport $report) => [
                 'id' => 'report-'.$report->report_id,
@@ -81,11 +49,22 @@ class DashboardController extends Controller
             ])
             ->values();
 
-        return Inertia::render('admin/dashboard', [
+        $recentIncidents = IncidentRecord::query()
+            ->with('barangay')
+            ->latest('data_time')
+            ->limit(3)
+            ->get()
+            ->map(fn (IncidentRecord $incident) => [
+                'id' => $incident->incident_id,
+                'label' => ucfirst($incident->incident_type->value).' Fire · '.($incident->barangay?->barangay_name ?? '—'),
+                'time' => $incident->data_time?->format('g:i A'),
+            ])
+            ->values();
+
+        return Inertia::render('dashboard', [
             'stats' => $stats,
-            'monthlyIncidents' => $monthlyIncidents,
-            'incidentTypes' => $incidentTypes,
             'mapMarkers' => $mapMarkers,
+            'recentIncidents' => $recentIncidents,
         ]);
     }
 }

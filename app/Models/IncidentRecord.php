@@ -2,6 +2,9 @@
 
 namespace App\Models;
 
+use App\Enums\IncidentType;
+use App\Enums\SeverityLevel;
+use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Carbon;
@@ -17,6 +20,7 @@ use Illuminate\Support\Carbon;
  * @property int $casualties
  * @property string|null $notes
  */
+#[Fillable(['report_id', 'barangay_id', 'data_time', 'incident_type', 'severity_level', 'cause_of_fire', 'casualties', 'notes'])]
 class IncidentRecord extends Model
 {
     protected $table = 'incident_record';
@@ -29,6 +33,8 @@ class IncidentRecord extends Model
     {
         return [
             'data_time' => 'datetime',
+            'incident_type' => IncidentType::class,
+            'severity_level' => SeverityLevel::class,
         ];
     }
 

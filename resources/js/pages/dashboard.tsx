@@ -8,17 +8,37 @@ import {
 } from 'lucide-react';
 import { FireMap } from '@/components/fire-map';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { LIAN_CENTER, RISK_POINTS } from '@/lib/lian-batangas';
+import { LIAN_CENTER } from '@/lib/lian-batangas';
 import { incidents, riskMapping } from '@/routes';
 
-const stats = [
-    { label: 'Total Incidents', value: '127', icon: Flame },
-    { label: 'Active Incidents', value: '3', icon: TriangleAlert },
-    { label: 'Resolved Today', value: '2', icon: Clock },
-    { label: 'Avg Response Time', value: '8.5 min', icon: Clock },
-];
+type Stat = { label: string; value: string };
+type MapMarker = {
+    id: string;
+    position: [number, number];
+    label: string;
+    status: string;
+};
+type RecentIncident = { id: number; label: string; time: string | null };
 
-export default function Dashboard() {
+type PageProps = {
+    stats: Stat[];
+    mapMarkers: MapMarker[];
+    recentIncidents: RecentIncident[];
+};
+
+const STAT_ICONS = [Flame, TriangleAlert, Clock, Clock];
+
+const STATUS_COLORS: Record<string, string> = {
+    pending: '#eab308',
+    verified: '#f97316',
+    dispatched: '#dc2626',
+};
+
+export default function Dashboard({
+    stats,
+    mapMarkers,
+    recentIncidents,
+}: PageProps) {
     return (
         <>
             <Head title="Dashboard" />
@@ -32,21 +52,24 @@ export default function Dashboard() {
                 </div>
 
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                    {stats.map((stat) => (
-                        <Card key={stat.label}>
-                            <CardHeader className="flex flex-row items-center justify-between pb-2">
-                                <CardTitle className="text-sm font-normal text-muted-foreground">
-                                    {stat.label}
-                                </CardTitle>
-                                <stat.icon className="size-4 text-muted-foreground" />
-                            </CardHeader>
-                            <CardContent>
-                                <div className="text-3xl font-bold">
-                                    {stat.value}
-                                </div>
-                            </CardContent>
-                        </Card>
-                    ))}
+                    {stats.map((stat, index) => {
+                        const Icon = STAT_ICONS[index] ?? Flame;
+                        return (
+                            <Card key={stat.label}>
+                                <CardHeader className="flex flex-row items-center justify-between pb-2">
+                                    <CardTitle className="text-sm font-normal text-muted-foreground">
+                                        {stat.label}
+                                    </CardTitle>
+                                    <Icon className="size-4 text-muted-foreground" />
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="text-3xl font-bold">
+                                        {stat.value}
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        );
+                    })}
                 </div>
 
                 <Card>
@@ -62,16 +85,12 @@ export default function Dashboard() {
                                 center={LIAN_CENTER}
                                 zoom={12}
                                 centerLabel="Lian, Batangas"
-                                markers={RISK_POINTS.slice(0, 4).map((p) => ({
-                                    id: p.id,
-                                    position: p.position,
-                                    label: p.name,
+                                markers={mapMarkers.map((m) => ({
+                                    id: m.id,
+                                    position: m.position,
+                                    label: m.label,
                                     color:
-                                        p.risk === 'High'
-                                            ? '#dc2626'
-                                            : p.risk === 'Medium'
-                                              ? '#f97316'
-                                              : '#eab308',
+                                        STATUS_COLORS[m.status] ?? '#eab308',
                                 }))}
                             />
                         </div>
@@ -106,20 +125,23 @@ export default function Dashboard() {
                             <CardTitle>Recent Incidents</CardTitle>
                         </CardHeader>
                         <CardContent className="flex flex-col gap-3 text-sm">
-                            <div className="flex items-center justify-between">
-                                <span>Residential Fire &middot; Prenza</span>
-                                <span className="text-muted-foreground">
-                                    2:30 PM
-                                </span>
-                            </div>
-                            <div className="flex items-center justify-between">
-                                <span>
-                                    Electrical Fire &middot; Malaruhatan
-                                </span>
-                                <span className="text-muted-foreground">
-                                    1:15 PM
-                                </span>
-                            </div>
+                            {recentIncidents.length === 0 ? (
+                                <p className="text-muted-foreground">
+                                    No incidents logged yet.
+                                </p>
+                            ) : (
+                                recentIncidents.map((incident) => (
+                                    <div
+                                        key={incident.id}
+                                        className="flex items-center justify-between"
+                                    >
+                                        <span>{incident.label}</span>
+                                        <span className="text-muted-foreground">
+                                            {incident.time}
+                                        </span>
+                                    </div>
+                                ))
+                            )}
                         </CardContent>
                     </Card>
                 </div>

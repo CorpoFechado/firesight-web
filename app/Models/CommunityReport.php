@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Enums\ReportStatus;
+use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasOne;
@@ -18,6 +20,7 @@ use Illuminate\Support\Carbon;
  * @property float $longitude
  * @property Carbon $created_at
  */
+#[Fillable(['user_id', 'reporter_name', 'contact_number', 'description', 'latitude', 'longitude', 'status'])]
 class CommunityReport extends Model
 {
     protected $table = 'community_report';
@@ -34,6 +37,7 @@ class CommunityReport extends Model
             'latitude' => 'float',
             'longitude' => 'float',
             'created_at' => 'datetime',
+            'status' => ReportStatus::class,
         ];
     }
 

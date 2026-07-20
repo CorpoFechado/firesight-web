@@ -1,7 +1,16 @@
-import { Head } from '@inertiajs/react';
-import { Clock, FilePlus2, MapPin, Search, User } from 'lucide-react';
-import { useMemo, useState } from 'react';
-import { toast } from 'sonner';
+import { Head, router, useForm } from '@inertiajs/react';
+import {
+    Clock,
+    FilePlus2,
+    MapPin,
+    Search,
+    SquarePen,
+    Trash2,
+    User,
+} from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import IncidentController from '@/actions/App/Http/Controllers/IncidentController';
+import InputError from '@/components/input-error';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -24,77 +33,38 @@ import {
 } from '@/components/ui/select';
 import { incidents as incidentsRoute } from '@/routes';
 
-type Status = 'Pending' | 'Verified' | 'Responding' | 'Resolved';
+type Status = 'Pending' | 'Verified' | 'Responding' | 'Resolved' | 'Rejected';
+type Severity = 'Low' | 'Moderate' | 'High' | 'Critical';
+type IncidentTypeValue = 'structural' | 'electrical' | 'grass' | 'vehicular' | 'other';
+type SeverityValue = 'low' | 'moderate' | 'high' | 'critical';
+type ReportStatusValue = 'pending' | 'verified' | 'dispatched' | 'resolved' | 'rejected';
 
 type Incident = {
     id: number;
     type: string;
     typeFilipino: string;
+    typeValue: IncidentTypeValue;
     location: string;
     barangay: string;
-    date: string;
-    severity: 'Low' | 'Medium' | 'High';
+    barangayId: number;
+    date: string | null;
+    dateRaw: string | null;
+    severity: Severity;
+    severityValue: SeverityValue;
     status: Status;
+    statusValue: ReportStatusValue;
     reportedBy: string;
+    causeOfFire: string | null;
+    casualties: number;
+    notes: string | null;
 };
 
-const INCIDENTS: Incident[] = [
-    {
-        id: 1,
-        type: 'Residential Fire',
-        typeFilipino: 'Sunog sa Bahay',
-        location: '123 Rizal Street',
-        barangay: 'Barangay Prenza',
-        date: 'March 26, 2026 - 2:30 PM',
-        severity: 'High',
-        status: 'Responding',
-        reportedBy: 'Juan dela Cruz',
-    },
-    {
-        id: 2,
-        type: 'Electrical Fire',
-        typeFilipino: 'Sunog sa Kuryente',
-        location: '456 Bonifacio Avenue',
-        barangay: 'Barangay Malaruhatan',
-        date: 'March 26, 2026 - 1:15 PM',
-        severity: 'Medium',
-        status: 'Verified',
-        reportedBy: 'Maria Santos',
-    },
-    {
-        id: 3,
-        type: 'Grass Fire',
-        typeFilipino: 'Sunog sa Damuhan',
-        location: 'Sitio Kalsada',
-        barangay: 'Barangay Cumba',
-        date: 'March 25, 2026 - 4:05 PM',
-        severity: 'Low',
-        status: 'Pending',
-        reportedBy: 'Pedro Reyes',
-    },
-    {
-        id: 4,
-        type: 'Commercial Fire',
-        typeFilipino: 'Sunog sa Tindahan',
-        location: 'Public Market',
-        barangay: 'Barangay Poblacion',
-        date: 'March 24, 2026 - 9:40 AM',
-        severity: 'High',
-        status: 'Resolved',
-        reportedBy: 'Ana Lopez',
-    },
-    {
-        id: 5,
-        type: 'Vehicle Fire',
-        typeFilipino: 'Sunog sa Sasakyan',
-        location: 'National Highway',
-        barangay: 'Barangay Balibago',
-        date: 'March 23, 2026 - 6:20 PM',
-        severity: 'Medium',
-        status: 'Resolved',
-        reportedBy: 'Carlo Ramirez',
-    },
-];
+type Barangay = { id: number; name: string };
+
+type PageProps = {
+    incidents: Incident[];
+    barangays: Barangay[];
+};
 
 const STATUS_STYLES: Record<Status, string> = {
     Pending: 'bg-muted text-muted-foreground',
@@ -103,21 +73,52 @@ const STATUS_STYLES: Record<Status, string> = {
         'bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-400',
     Resolved:
         'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-400',
+    Rejected: 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-400',
 };
 
-const SEVERITY_STYLES: Record<Incident['severity'], string> = {
+const SEVERITY_STYLES: Record<Severity, string> = {
     Low: 'text-yellow-600 dark:text-yellow-500',
-    Medium: 'text-orange-600 dark:text-orange-500',
-    High: 'text-red-600 dark:text-red-500',
+    Moderate: 'text-orange-500 dark:text-orange-400',
+    High: 'text-orange-600 dark:text-orange-500',
+    Critical: 'text-red-600 dark:text-red-500',
 };
 
-export default function Incidents() {
+const INCIDENT_TYPE_OPTIONS: { value: IncidentTypeValue; label: string }[] = [
+    { value: 'structural', label: 'Structural Fire' },
+    { value: 'electrical', label: 'Electrical Fire' },
+    { value: 'grass', label: 'Grass Fire' },
+    { value: 'vehicular', label: 'Vehicle Fire' },
+    { value: 'other', label: 'Other' },
+];
+
+const SEVERITY_OPTIONS: { value: SeverityValue; label: string }[] = [
+    { value: 'low', label: 'Low' },
+    { value: 'moderate', label: 'Moderate' },
+    { value: 'high', label: 'High' },
+    { value: 'critical', label: 'Critical - Code Red' },
+];
+
+const REPORT_STATUS_OPTIONS: { value: ReportStatusValue; label: string }[] = [
+    { value: 'pending', label: 'Pending' },
+    { value: 'verified', label: 'Verified' },
+    { value: 'dispatched', label: 'Responding' },
+    { value: 'resolved', label: 'Resolved' },
+    { value: 'rejected', label: 'Rejected' },
+];
+
+export default function Incidents({ incidents, barangays }: PageProps) {
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState<Status | 'All'>('All');
     const [reportOpen, setReportOpen] = useState(false);
+    const [editingIncident, setEditingIncident] = useState<Incident | null>(
+        null,
+    );
+    const [deletingIncident, setDeletingIncident] = useState<Incident | null>(
+        null,
+    );
 
     const filtered = useMemo(() => {
-        return INCIDENTS.filter((incident) => {
+        return incidents.filter((incident) => {
             const matchesStatus =
                 statusFilter === 'All' || incident.status === statusFilter;
             const matchesSearch =
@@ -130,18 +131,27 @@ export default function Incidents() {
 
             return matchesStatus && matchesSearch;
         });
-    }, [search, statusFilter]);
+    }, [incidents, search, statusFilter]);
 
     const counts = useMemo(
         () => ({
-            Pending: INCIDENTS.filter((i) => i.status === 'Pending').length,
-            Verified: INCIDENTS.filter((i) => i.status === 'Verified').length,
-            Responding: INCIDENTS.filter((i) => i.status === 'Responding')
+            Pending: incidents.filter((i) => i.status === 'Pending').length,
+            Verified: incidents.filter((i) => i.status === 'Verified').length,
+            Responding: incidents.filter((i) => i.status === 'Responding')
                 .length,
-            Resolved: INCIDENTS.filter((i) => i.status === 'Resolved').length,
+            Resolved: incidents.filter((i) => i.status === 'Resolved').length,
         }),
-        [],
+        [incidents],
     );
+
+    const handleDelete = () => {
+        if (!deletingIncident) return;
+
+        router.delete(IncidentController.destroy.url(deletingIncident.id), {
+            preserveScroll: true,
+            onSuccess: () => setDeletingIncident(null),
+        });
+    };
 
     return (
         <>
@@ -192,6 +202,7 @@ export default function Incidents() {
                                 Responding
                             </SelectItem>
                             <SelectItem value="Resolved">Resolved</SelectItem>
+                            <SelectItem value="Rejected">Rejected</SelectItem>
                         </SelectContent>
                     </Select>
                 </div>
@@ -254,11 +265,39 @@ export default function Incidents() {
                                 className={`mt-2 text-sm font-medium ${SEVERITY_STYLES[incident.severity]}`}
                             >
                                 {incident.severity} Severity
+                                {incident.casualties > 0 &&
+                                    ` · ${incident.casualties} casualt${incident.casualties === 1 ? 'y' : 'ies'}`}
                             </div>
 
-                            <div className="mt-3 flex items-center gap-2 border-t pt-3 text-sm text-muted-foreground">
-                                <User className="size-4" />
-                                Reported by: {incident.reportedBy}
+                            <div className="mt-3 flex items-center justify-between gap-2 border-t pt-3">
+                                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                    <User className="size-4" />
+                                    Reported by: {incident.reportedBy}
+                                </div>
+                                <div className="flex gap-1">
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="size-8"
+                                        onClick={() =>
+                                            setEditingIncident(incident)
+                                        }
+                                        aria-label={`Edit incident #${incident.id}`}
+                                    >
+                                        <SquarePen className="size-4" />
+                                    </Button>
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="size-8 text-red-600 hover:bg-red-50 hover:text-red-700"
+                                        onClick={() =>
+                                            setDeletingIncident(incident)
+                                        }
+                                        aria-label={`Delete incident #${incident.id}`}
+                                    >
+                                        <Trash2 className="size-4" />
+                                    </Button>
+                                </div>
                             </div>
                         </Card>
                     ))}
@@ -270,31 +309,123 @@ export default function Incidents() {
                 </div>
             </div>
 
-            <CreateReportDialog open={reportOpen} onOpenChange={setReportOpen} />
+            <CreateReportDialog
+                open={reportOpen}
+                onOpenChange={setReportOpen}
+                barangays={barangays}
+            />
+
+            <EditIncidentDialog
+                incident={editingIncident}
+                onOpenChange={(open) => {
+                    if (!open) setEditingIncident(null);
+                }}
+                barangays={barangays}
+            />
+
+            <Dialog
+                open={deletingIncident !== null}
+                onOpenChange={(open) => {
+                    if (!open) setDeletingIncident(null);
+                }}
+            >
+                <DialogContent>
+                    <DialogHeader>
+                        <div className="flex items-center gap-3">
+                            <div className="flex size-9 items-center justify-center rounded-md bg-red-100 text-red-700">
+                                <Trash2 className="size-4.5" />
+                            </div>
+                            <div>
+                                <DialogTitle>Delete Incident</DialogTitle>
+                                <DialogDescription>
+                                    This cannot be undone
+                                </DialogDescription>
+                            </div>
+                        </div>
+                    </DialogHeader>
+
+                    <p className="text-sm text-muted-foreground">
+                        Are you sure you want to delete{' '}
+                        <span className="font-medium text-foreground">
+                            {deletingIncident?.type}
+                        </span>{' '}
+                        at {deletingIncident?.barangay}? The linked community
+                        report will also be removed.
+                    </p>
+
+                    <DialogFooter>
+                        <Button
+                            variant="secondary"
+                            onClick={() => setDeletingIncident(null)}
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            className="bg-red-600 hover:bg-red-700"
+                            onClick={handleDelete}
+                        >
+                            Delete
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </>
     );
 }
 
+type CreateForm = {
+    incident_type: IncidentTypeValue | '';
+    severity_level: SeverityValue | '';
+    location: string;
+    barangay_id: string;
+    data_time: string;
+    casualties: number;
+    cause_of_fire: string;
+    description: string;
+    assigned_team: string;
+    units_deployed: string;
+};
+
+const emptyCreateForm: CreateForm = {
+    incident_type: 'structural',
+    severity_level: 'high',
+    location: '',
+    barangay_id: '',
+    data_time: '',
+    casualties: 0,
+    cause_of_fire: '',
+    description: '',
+    assigned_team: '',
+    units_deployed: '',
+};
+
 function CreateReportDialog({
     open,
     onOpenChange,
+    barangays,
 }: {
     open: boolean;
     onOpenChange: (open: boolean) => void;
+    barangays: Barangay[];
 }) {
     const [step, setStep] = useState<1 | 2>(1);
+    const form = useForm<CreateForm>(emptyCreateForm);
 
     const handleClose = (next: boolean) => {
         onOpenChange(next);
 
         if (!next) {
             setStep(1);
+            form.reset();
+            form.clearErrors();
         }
     };
 
     const handleSubmit = () => {
-        toast.success('Incident report submitted (demo only)');
-        handleClose(false);
+        form.post(IncidentController.store.url(), {
+            preserveScroll: true,
+            onSuccess: () => handleClose(false),
+        });
     };
 
     return (
@@ -331,85 +462,145 @@ function CreateReportDialog({
                     <div className="grid gap-4">
                         <div className="grid gap-2">
                             <Label>Incident Type</Label>
-                            <Select defaultValue="commercial">
+                            <Select
+                                value={form.data.incident_type}
+                                onValueChange={(value) =>
+                                    form.setData(
+                                        'incident_type',
+                                        value as IncidentTypeValue,
+                                    )
+                                }
+                            >
                                 <SelectTrigger>
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="residential">
-                                        Residential Fire
-                                    </SelectItem>
-                                    <SelectItem value="commercial">
-                                        Commercial Fire
-                                    </SelectItem>
-                                    <SelectItem value="electrical">
-                                        Electrical Fire
-                                    </SelectItem>
-                                    <SelectItem value="grass">
-                                        Grass Fire
-                                    </SelectItem>
-                                    <SelectItem value="vehicle">
-                                        Vehicle Fire
-                                    </SelectItem>
+                                    {INCIDENT_TYPE_OPTIONS.map((option) => (
+                                        <SelectItem
+                                            key={option.value}
+                                            value={option.value}
+                                        >
+                                            {option.label}
+                                        </SelectItem>
+                                    ))}
                                 </SelectContent>
                             </Select>
+                            <InputError
+                                message={form.errors.incident_type}
+                            />
                         </div>
                         <div className="grid gap-2">
                             <Label>Severity Level</Label>
-                            <Select defaultValue="critical">
+                            <Select
+                                value={form.data.severity_level}
+                                onValueChange={(value) =>
+                                    form.setData(
+                                        'severity_level',
+                                        value as SeverityValue,
+                                    )
+                                }
+                            >
                                 <SelectTrigger>
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="low">
-                                        Low
-                                    </SelectItem>
-                                    <SelectItem value="medium">
-                                        Medium
-                                    </SelectItem>
-                                    <SelectItem value="critical">
-                                        Critical - Code Red
-                                    </SelectItem>
+                                    {SEVERITY_OPTIONS.map((option) => (
+                                        <SelectItem
+                                            key={option.value}
+                                            value={option.value}
+                                        >
+                                            {option.label}
+                                        </SelectItem>
+                                    ))}
                                 </SelectContent>
                             </Select>
+                            <InputError
+                                message={form.errors.severity_level}
+                            />
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                             <div className="grid gap-2">
                                 <Label>Specific Location</Label>
-                                <Input placeholder="e.g., 123 Rizal Street" />
+                                <Input
+                                    placeholder="e.g., 123 Rizal Street"
+                                    value={form.data.location}
+                                    onChange={(e) =>
+                                        form.setData(
+                                            'location',
+                                            e.target.value,
+                                        )
+                                    }
+                                />
+                                <InputError message={form.errors.location} />
                             </div>
                             <div className="grid gap-2">
                                 <Label>Barangay</Label>
-                                <Select>
+                                <Select
+                                    value={form.data.barangay_id}
+                                    onValueChange={(value) =>
+                                        form.setData('barangay_id', value)
+                                    }
+                                >
                                     <SelectTrigger>
                                         <SelectValue placeholder="Select barangay" />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="prenza">
-                                            Prenza
-                                        </SelectItem>
-                                        <SelectItem value="malaruhatan">
-                                            Malaruhatan
-                                        </SelectItem>
-                                        <SelectItem value="cumba">
-                                            Cumba
-                                        </SelectItem>
+                                        {barangays.map((b) => (
+                                            <SelectItem
+                                                key={b.id}
+                                                value={String(b.id)}
+                                            >
+                                                {b.name}
+                                            </SelectItem>
+                                        ))}
                                     </SelectContent>
                                 </Select>
+                                <InputError
+                                    message={form.errors.barangay_id}
+                                />
                             </div>
                         </div>
                         <div className="grid gap-2">
                             <Label>Date &amp; Time</Label>
-                            <Input type="datetime-local" />
+                            <Input
+                                type="datetime-local"
+                                value={form.data.data_time}
+                                onChange={(e) =>
+                                    form.setData('data_time', e.target.value)
+                                }
+                            />
+                            <InputError message={form.errors.data_time} />
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                             <div className="grid gap-2">
                                 <Label>Casualties</Label>
-                                <Input type="number" defaultValue={0} min={0} />
+                                <Input
+                                    type="number"
+                                    min={0}
+                                    value={form.data.casualties}
+                                    onChange={(e) =>
+                                        form.setData(
+                                            'casualties',
+                                            Number(e.target.value),
+                                        )
+                                    }
+                                />
+                                <InputError
+                                    message={form.errors.casualties}
+                                />
                             </div>
                             <div className="grid gap-2">
-                                <Label>Injuries</Label>
-                                <Input type="number" defaultValue={0} min={0} />
+                                <Label>Cause of Fire</Label>
+                                <Input
+                                    placeholder="e.g., Unattended cooking"
+                                    value={form.data.cause_of_fire}
+                                    onChange={(e) =>
+                                        form.setData(
+                                            'cause_of_fire',
+                                            e.target.value,
+                                        )
+                                    }
+                                />
                             </div>
                         </div>
                     </div>
@@ -420,19 +611,31 @@ function CreateReportDialog({
                             <textarea
                                 className="min-h-24 rounded-md border bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
                                 placeholder="Provide detailed description of the incident..."
+                                value={form.data.description}
+                                onChange={(e) =>
+                                    form.setData(
+                                        'description',
+                                        e.target.value,
+                                    )
+                                }
                             />
                         </div>
                         <div className="grid gap-2">
                             <Label>Assigned Response Team</Label>
-                            <Select defaultValue="bravo">
+                            <Select
+                                value={form.data.assigned_team}
+                                onValueChange={(value) =>
+                                    form.setData('assigned_team', value)
+                                }
+                            >
                                 <SelectTrigger>
-                                    <SelectValue />
+                                    <SelectValue placeholder="Select team" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="alpha">
+                                    <SelectItem value="Alpha Team - Lian Fire Station">
                                         Alpha Team - Lian Fire Station
                                     </SelectItem>
-                                    <SelectItem value="bravo">
+                                    <SelectItem value="Bravo Team - Lian Fire Station">
                                         Bravo Team - Lian Fire Station
                                     </SelectItem>
                                 </SelectContent>
@@ -440,7 +643,16 @@ function CreateReportDialog({
                         </div>
                         <div className="grid gap-2">
                             <Label>Units Deployed</Label>
-                            <Input placeholder="e.g., Engine 1, Rescue 2" />
+                            <Input
+                                placeholder="e.g., Engine 1, Rescue 2"
+                                value={form.data.units_deployed}
+                                onChange={(e) =>
+                                    form.setData(
+                                        'units_deployed',
+                                        e.target.value,
+                                    )
+                                }
+                            />
                         </div>
                         <div className="grid gap-2">
                             <Label>Attachments</Label>
@@ -448,7 +660,7 @@ function CreateReportDialog({
                                 <FilePlus2 className="size-5" />
                                 Click to upload or drag and drop
                                 <span className="text-xs">
-                                    Images, PDFs, or Documents
+                                    Coming soon &mdash; not saved yet
                                 </span>
                             </div>
                         </div>
@@ -474,11 +686,251 @@ function CreateReportDialog({
                             <Button
                                 className="bg-orange-500 hover:bg-orange-600"
                                 onClick={handleSubmit}
+                                disabled={form.processing}
                             >
                                 Submit Report
                             </Button>
                         </>
                     )}
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
+type EditForm = {
+    incident_type: IncidentTypeValue | '';
+    severity_level: SeverityValue | '';
+    barangay_id: string;
+    status: ReportStatusValue | '';
+    casualties: number;
+    cause_of_fire: string;
+    notes: string;
+};
+
+function EditIncidentDialog({
+    incident,
+    onOpenChange,
+    barangays,
+}: {
+    incident: Incident | null;
+    onOpenChange: (open: boolean) => void;
+    barangays: Barangay[];
+}) {
+    const form = useForm<EditForm>({
+        incident_type: 'structural',
+        severity_level: 'low',
+        barangay_id: '',
+        status: 'pending',
+        casualties: 0,
+        cause_of_fire: '',
+        notes: '',
+    });
+
+    // Re-seed the form whenever a different incident is opened for editing.
+    useEffect(() => {
+        if (!incident) return;
+
+        form.setData({
+            incident_type: incident.typeValue,
+            severity_level: incident.severityValue,
+            barangay_id: String(incident.barangayId),
+            status: incident.statusValue,
+            casualties: incident.casualties,
+            cause_of_fire: incident.causeOfFire ?? '',
+            notes: incident.notes ?? '',
+        });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [incident?.id]);
+
+    const handleSubmit = () => {
+        if (!incident) return;
+
+        form.patch(IncidentController.update.url(incident.id), {
+            preserveScroll: true,
+            onSuccess: () => onOpenChange(false),
+        });
+    };
+
+    return (
+        <Dialog
+            open={incident !== null}
+            onOpenChange={onOpenChange}
+        >
+            <DialogContent className="sm:max-w-lg">
+                <DialogHeader>
+                    <div className="flex items-center gap-3">
+                        <div className="flex size-9 items-center justify-center rounded-md bg-blue-100 text-blue-700">
+                            <SquarePen className="size-4.5" />
+                        </div>
+                        <div>
+                            <DialogTitle>Edit Incident</DialogTitle>
+                            <DialogDescription>
+                                Update incident details and status
+                            </DialogDescription>
+                        </div>
+                    </div>
+                </DialogHeader>
+
+                <div className="grid gap-4">
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="grid gap-2">
+                            <Label>Incident Type</Label>
+                            <Select
+                                value={form.data.incident_type}
+                                onValueChange={(value) =>
+                                    form.setData(
+                                        'incident_type',
+                                        value as IncidentTypeValue,
+                                    )
+                                }
+                            >
+                                <SelectTrigger>
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {INCIDENT_TYPE_OPTIONS.map((option) => (
+                                        <SelectItem
+                                            key={option.value}
+                                            value={option.value}
+                                        >
+                                            {option.label}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="grid gap-2">
+                            <Label>Severity Level</Label>
+                            <Select
+                                value={form.data.severity_level}
+                                onValueChange={(value) =>
+                                    form.setData(
+                                        'severity_level',
+                                        value as SeverityValue,
+                                    )
+                                }
+                            >
+                                <SelectTrigger>
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {SEVERITY_OPTIONS.map((option) => (
+                                        <SelectItem
+                                            key={option.value}
+                                            value={option.value}
+                                        >
+                                            {option.label}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="grid gap-2">
+                            <Label>Barangay</Label>
+                            <Select
+                                value={form.data.barangay_id}
+                                onValueChange={(value) =>
+                                    form.setData('barangay_id', value)
+                                }
+                            >
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Select barangay" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {barangays.map((b) => (
+                                        <SelectItem
+                                            key={b.id}
+                                            value={String(b.id)}
+                                        >
+                                            {b.name}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="grid gap-2">
+                            <Label>Status</Label>
+                            <Select
+                                value={form.data.status}
+                                onValueChange={(value) =>
+                                    form.setData(
+                                        'status',
+                                        value as ReportStatusValue,
+                                    )
+                                }
+                            >
+                                <SelectTrigger>
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {REPORT_STATUS_OPTIONS.map((option) => (
+                                        <SelectItem
+                                            key={option.value}
+                                            value={option.value}
+                                        >
+                                            {option.label}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="grid gap-2">
+                            <Label>Casualties</Label>
+                            <Input
+                                type="number"
+                                min={0}
+                                value={form.data.casualties}
+                                onChange={(e) =>
+                                    form.setData(
+                                        'casualties',
+                                        Number(e.target.value),
+                                    )
+                                }
+                            />
+                        </div>
+                        <div className="grid gap-2">
+                            <Label>Cause of Fire</Label>
+                            <Input
+                                value={form.data.cause_of_fire}
+                                onChange={(e) =>
+                                    form.setData(
+                                        'cause_of_fire',
+                                        e.target.value,
+                                    )
+                                }
+                            />
+                        </div>
+                    </div>
+                    <div className="grid gap-2">
+                        <Label>Notes</Label>
+                        <textarea
+                            className="min-h-20 rounded-md border bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                            value={form.data.notes}
+                            onChange={(e) =>
+                                form.setData('notes', e.target.value)
+                            }
+                        />
+                    </div>
+                </div>
+
+                <DialogFooter>
+                    <Button
+                        variant="secondary"
+                        onClick={() => onOpenChange(false)}
+                    >
+                        Cancel
+                    </Button>
+                    <Button
+                        onClick={handleSubmit}
+                        disabled={form.processing}
+                    >
+                        Save Changes
+                    </Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>
